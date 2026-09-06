@@ -6,7 +6,7 @@ A Foundry Virtual Tabletop v14 module for D&D 5e that recreates Honkai: Star Rai
 
 - A movable and resizable circular Ultimate orb for every configured player character.
 - Bottom-to-top animated Energy fill.
-- Separate charging and fully charged colors.
+- Element-defined charging and fully charged colors inherited by every assigned character.
 - Green **Ultimate Ready** text at 100% Energy.
 - Per-user saved orb position, size, and visibility.
 - Automatic Energy gain when a character attacks or is attacked.
@@ -17,6 +17,7 @@ A Foundry Virtual Tabletop v14 module for D&D 5e that recreates Honkai: Star Rai
 - A one-second, world-wide cinematic artwork splash (duration is configurable).
 - Temporary interrupt turns inserted into the Combat Tracker.
 - GM-defined custom Elements with uploaded icons and colors.
+- Immediate GM-only manual Energy override on each character's Ultimate tab.
 - Optional Element badge on the Ultimate orb.
 - Midi-QOL support, with a core D&D 5e chat-message fallback.
 - GM-authoritative socket handling for player Ultimate requests.
