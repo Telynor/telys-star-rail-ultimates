@@ -205,3 +205,6 @@
 .tsru-element-manager { padding: 8px; }
 .tsru-elements-list { max-height: 620px; overflow-y: auto; padding-right: 4px; }
 .tsru-element-row .tsru-remove-element { color: #ff8c8c; }
+.tsru-tab-control { position: relative; }
+.tsru-tab-label { position: absolute; left: -9999px; }
+.tsru-config-fallback { color: var(--tsru-gold); }
