@@ -645,19 +645,24 @@ async function openUltimateConfig(actor, sheetApp = null) {
 }
 
 function activateConfigListeners(actor, tab, app) {
-  tab.find(".tsru-config-form").on("submit", async event => {
+  tab.find("input, select, button").prop("disabled", false);
+  tab.find("input:not([readonly])").prop("readonly", false);
+  tab.on("input.tsru change.tsru", "input, select", event => event.stopPropagation());
+  tab.find("[data-action='save-config']").on("click", async event => {
     event.preventDefault();
-    const form = event.currentTarget;
-    const fd = new FormData(form);
-    const data = Object.fromEntries(fd.entries());
+    event.stopPropagation();
+    const data = {};
+    tab.find("[name]").each((_index, field) => {
+      data[field.name] = field.type === "checkbox" ? field.checked : field.value;
+    });
     for (const key of ["current", "max", "regenScore", "attackGain", "attackedGain", "splashDuration"]) data[key] = Number(data[key]);
-    for (const key of ["enabled", "showPercent"]) data[key] = form.elements[key]?.checked ?? false;
+    for (const key of ["enabled", "showPercent"]) data[key] = Boolean(data[key]);
     data.max = Math.max(1, data.max || 100);
     data.current = clamp(data.current, 0, data.max);
     await actor.setFlag(MODULE_ID, "ultimate", data);
     ui.notifications.info(`${actor.name}'s Ultimate configuration saved.`);
-    app.render(false);
     refreshOrb(actor);
+    if (app?.render) app.render(false);
   });
   tab.find(".file-picker").on("click", event => {
     const button = event.currentTarget;
