@@ -644,11 +644,20 @@ function addHudTool(controls) {
     name: "tsru-orbs",
     title: "Show My Ultimate Orbs",
     icon: "fas fa-burst",
+    order: 90,
     button: true,
-    onClick: async () => {
+    visible: true,
+    onChange: async () => {
       const actors = game.actors.filter(canObserveActor);
+      if (!actors.length) {
+        ui.notifications.warn("No enabled Ultimate characters are available to you. A GM must enable a character in its Ultimate tab first.");
+        return;
+      }
+      const hidden = actors.filter(actor => !userLayout(actor.id).visible);
       for (const actor of actors) await saveLayout(actor.id, {visible: true});
       refreshAllOrbs();
+      if (hidden.length) ui.notifications.info(`Showing ${hidden.length} Ultimate orb${hidden.length === 1 ? "" : "s"}.`);
+      else ui.notifications.info("Your configured Ultimate orbs are already visible.");
     }
   };
   if (Array.isArray(token.tools)) token.tools.push(tool);
