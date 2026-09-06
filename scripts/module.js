@@ -1,0 +1,710 @@
+const MODULE_ID = "telys-star-rail-ultimates";
+const SOCKET = `module.${MODULE_ID}`;
+
+const DEFAULT_CONFIG = Object.freeze({
+  enabled: false,
+  current: 0,
+  max: 100,
+  regenScore: 10,
+  attackGain: 10,
+  attackedGain: 5,
+  attackedMode: "hit",
+  ultimateItemId: "",
+  splashImage: "",
+  splashDuration: 1,
+  orbImage: "",
+  chargeColor: "#596171",
+  readyColor: "#20e6ff",
+  showPercent: true,
+  elementId: ""
+});
+
+const state = {
+  orbs: new Map(),
+  processedMessages: new Set(),
+  ultimateLocks: new Set(),
+  pendingUltimates: new Map(),
+  suppressCombatHook: false
+};
+
+function activeGM() {
+  return game.users?.find(user => user.active && user.isGM);
+}
+
+function isAuthority() {
+  return game.user?.isGM && activeGM()?.id === game.user.id;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, Number(value) || 0));
+}
+
+function escapeHTML(value) {
+  const div = document.createElement("div");
+  div.textContent = String(value ?? "");
+  return div.innerHTML;
+}
+
+function getConfig(actor) {
+  const stored = actor?.getFlag(MODULE_ID, "ultimate") ?? {};
+  const config = foundry.utils.mergeObject(foundry.utils.deepClone(DEFAULT_CONFIG), stored, {
+    inplace: false,
+    insertKeys: true,
+    overwrite: true
+  });
+  config.max = Math.max(1, Number(config.max) || 100);
+  config.current = clamp(config.current, 0, config.max);
+  return config;
+}
+
+function regenModifier(config) {
+  return Math.floor(((Number(config.regenScore) || 10) - 10) / 2);
+}
+
+function energyGain(config, kind) {
+  const base = kind === "attack" ? config.attackGain : config.attackedGain;
+  return Math.max(0, (Number(base) || 0) + regenModifier(config));
+}
+
+async function setEnergy(actor, value) {
+  if (!actor) return;
+  const config = getConfig(actor);
+  const current = clamp(value, 0, config.max);
+  await actor.update({[`flags.${MODULE_ID}.ultimate.current`]: current});
+  return current;
+}
+
+async function addEnergy(actor, amount, reason = "") {
+  if (!actor || !isAuthority()) return;
+  const config = getConfig(actor);
+  if (!config.enabled || !amount) return;
+  const before = config.current;
+  const after = clamp(before + Number(amount), 0, config.max);
+  if (after === before) return;
+  await setEnergy(actor, after);
+  Hooks.callAll("tsruEnergyChanged", actor, before, after, reason);
+}
+
+function canObserveActor(actor) {
+  if (!actor || !getConfig(actor).enabled) return false;
+  return game.user.isGM || actor.isOwner;
+}
+
+function actorFromUuidish(value) {
+  if (!value) return null;
+  if (value instanceof Actor) return value;
+  if (value.actor instanceof Actor) return value.actor;
+  if (value.document?.actor instanceof Actor) return value.document.actor;
+  if (value.actorId) return game.actors.get(value.actorId) ?? null;
+  const id = String(value).split(".").at(-1);
+  return game.actors.get(id) ?? canvas?.tokens?.get(id)?.actor ?? null;
+}
+
+async function actorFromUuid(value) {
+  if (!value) return null;
+  try {
+    const doc = await fromUuid(value);
+    return doc?.actor ?? (doc instanceof Actor ? doc : null);
+  } catch (_error) {
+    return actorFromUuidish(value);
+  }
+}
+
+function userLayout(actorId) {
+  const all = game.settings.get(MODULE_ID, "orbLayouts") ?? {};
+  return foundry.utils.mergeObject({x: 80, y: 180, size: 128, visible: true}, all[actorId] ?? {}, {inplace: false});
+}
+
+async function saveLayout(actorId, changes) {
+  const layouts = foundry.utils.deepClone(game.settings.get(MODULE_ID, "orbLayouts") ?? {});
+  layouts[actorId] = foundry.utils.mergeObject(layouts[actorId] ?? {}, changes, {inplace: false});
+  await game.settings.set(MODULE_ID, "orbLayouts", layouts);
+}
+
+function getElements() {
+  return game.settings.get(MODULE_ID, "elements") ?? [];
+}
+
+class UltimateOrb {
+  constructor(actor) {
+    this.actor = actor;
+    this.element = null;
+    this.drag = null;
+    this.resize = null;
+  }
+
+  render() {
+    const config = getConfig(this.actor);
+    if (!canObserveActor(this.actor)) return this.destroy();
+    const layout = userLayout(this.actor.id);
+    if (!layout.visible) return this.destroy();
+
+    if (!this.element) {
+      this.element = document.createElement("div");
+      this.element.className = "tsru-orb-widget";
+      this.element.dataset.actorId = this.actor.id;
+      this.element.innerHTML = `
+        <div class="tsru-orb-drag" title="Drag Ultimate orb"><i class="fas fa-grip-lines"></i></div>
+        <button type="button" class="tsru-orb" aria-label="Activate Ultimate">
+          <img class="tsru-orb-image">
+          <span class="tsru-orb-fill"></span>
+          <span class="tsru-orb-percent"></span>
+          <img class="tsru-orb-element" hidden>
+        </button>
+        <div class="tsru-ready-text">Ultimate Ready</div>
+        <button type="button" class="tsru-orb-close" title="Hide orb"><i class="fas fa-xmark"></i></button>
+        <div class="tsru-orb-resize" title="Resize"></div>`;
+      document.body.appendChild(this.element);
+      this.activateListeners();
+    }
+
+    const percent = clamp((config.current / config.max) * 100, 0, 100);
+    const ready = percent >= 100;
+    const color = ready ? config.readyColor : config.chargeColor;
+    const element = getElements().find(entry => entry.id === config.elementId);
+    this.element.style.left = `${clamp(layout.x, 0, window.innerWidth - 40)}px`;
+    this.element.style.top = `${clamp(layout.y, 0, window.innerHeight - 40)}px`;
+    this.element.style.setProperty("--tsru-size", `${clamp(layout.size, 72, 360)}px`);
+    this.element.style.setProperty("--tsru-fill", `${percent}%`);
+    this.element.style.setProperty("--tsru-color", color || DEFAULT_CONFIG.chargeColor);
+    this.element.classList.toggle("is-ready", ready);
+    this.element.querySelector(".tsru-orb-image").src = config.orbImage || this.actor.img || "icons/svg/mystery-man.svg";
+    this.element.querySelector(".tsru-orb-percent").textContent = config.showPercent ? `${Math.round(percent)}%` : "";
+    this.element.querySelector(".tsru-orb").disabled = !ready || state.ultimateLocks.has(this.actor.id);
+    this.element.querySelector(".tsru-orb").title = ready ? `${this.actor.name}: Activate Ultimate` : `${this.actor.name}: ${config.current}/${config.max} Energy`;
+    const badge = this.element.querySelector(".tsru-orb-element");
+    if (element?.icon) {
+      badge.src = element.icon;
+      badge.title = element.name;
+      badge.style.setProperty("--tsru-element-color", element.color || "#ffffff");
+      badge.hidden = false;
+    } else badge.hidden = true;
+    return this;
+  }
+
+  activateListeners() {
+    const dragHandle = this.element.querySelector(".tsru-orb-drag");
+    const resizeHandle = this.element.querySelector(".tsru-orb-resize");
+    dragHandle.addEventListener("pointerdown", event => {
+      event.preventDefault();
+      const rect = this.element.getBoundingClientRect();
+      this.drag = {dx: event.clientX - rect.left, dy: event.clientY - rect.top};
+      dragHandle.setPointerCapture(event.pointerId);
+    });
+    dragHandle.addEventListener("pointermove", event => {
+      if (!this.drag) return;
+      const x = clamp(event.clientX - this.drag.dx, 0, window.innerWidth - 40);
+      const y = clamp(event.clientY - this.drag.dy, 0, window.innerHeight - 40);
+      this.element.style.left = `${x}px`;
+      this.element.style.top = `${y}px`;
+    });
+    dragHandle.addEventListener("pointerup", async event => {
+      if (!this.drag) return;
+      this.drag = null;
+      dragHandle.releasePointerCapture(event.pointerId);
+      const rect = this.element.getBoundingClientRect();
+      await saveLayout(this.actor.id, {x: Math.round(rect.left), y: Math.round(rect.top)});
+    });
+    resizeHandle.addEventListener("pointerdown", event => {
+      event.preventDefault();
+      const rect = this.element.getBoundingClientRect();
+      this.resize = {startX: event.clientX, startSize: rect.width};
+      resizeHandle.setPointerCapture(event.pointerId);
+    });
+    resizeHandle.addEventListener("pointermove", event => {
+      if (!this.resize) return;
+      const size = clamp(this.resize.startSize + event.clientX - this.resize.startX, 72, 360);
+      this.element.style.setProperty("--tsru-size", `${size}px`);
+    });
+    resizeHandle.addEventListener("pointerup", async event => {
+      if (!this.resize) return;
+      const size = clamp(this.resize.startSize + event.clientX - this.resize.startX, 72, 360);
+      this.resize = null;
+      resizeHandle.releasePointerCapture(event.pointerId);
+      await saveLayout(this.actor.id, {size: Math.round(size)});
+    });
+    this.element.querySelector(".tsru-orb-close").addEventListener("click", async () => {
+      await saveLayout(this.actor.id, {visible: false});
+      this.destroy();
+    });
+    this.element.querySelector(".tsru-orb").addEventListener("click", () => requestUltimate(this.actor));
+  }
+
+  destroy() {
+    this.element?.remove();
+    this.element = null;
+    state.orbs.delete(this.actor.id);
+  }
+}
+
+function refreshOrb(actor) {
+  if (!actor) return;
+  if (!canObserveActor(actor) || !userLayout(actor.id).visible) {
+    state.orbs.get(actor.id)?.destroy();
+    return;
+  }
+  let orb = state.orbs.get(actor.id);
+  if (!orb) {
+    orb = new UltimateOrb(actor);
+    state.orbs.set(actor.id, orb);
+  }
+  orb.render();
+}
+
+function refreshAllOrbs() {
+  for (const actor of game.actors) refreshOrb(actor);
+  for (const [id, orb] of state.orbs) if (!game.actors.get(id)) orb.destroy();
+}
+
+async function toggleOrb(actor) {
+  const layout = userLayout(actor.id);
+  await saveLayout(actor.id, {visible: !layout.visible});
+  refreshOrb(actor);
+}
+
+function showSplash({actorName, image, duration = 1}) {
+  if (!image) return;
+  document.querySelectorAll(".tsru-splash").forEach(element => element.remove());
+  const splash = document.createElement("div");
+  splash.className = "tsru-splash";
+  const isVideo = /\.(webm|mp4|m4v)(\?.*)?$/i.test(image);
+  splash.innerHTML = `<div class="tsru-splash-backdrop"></div><div class="tsru-splash-media">${isVideo ? `<video src="${escapeHTML(image)}" autoplay muted playsinline></video>` : `<img src="${escapeHTML(image)}" alt="${escapeHTML(actorName)} Ultimate">`}</div>`;
+  document.body.appendChild(splash);
+  requestAnimationFrame(() => splash.classList.add("show"));
+  window.setTimeout(() => {
+    splash.classList.remove("show");
+    window.setTimeout(() => splash.remove(), 260);
+  }, Math.max(100, Number(duration) * 1000));
+}
+
+async function requestUltimate(actor) {
+  const config = getConfig(actor);
+  if (!config.enabled || config.current < config.max) return ui.notifications.warn("This Ultimate is not ready.");
+  if (!config.ultimateItemId) return ui.notifications.warn("No Ultimate Item is configured for this character.");
+  if (state.ultimateLocks.has(actor.id)) return;
+  if (game.user.isGM && isAuthority()) return executeUltimate(actor.id, game.user.id);
+  const gm = activeGM();
+  if (!gm) return ui.notifications.error("A GM must be connected to activate an Ultimate.");
+  game.socket.emit(SOCKET, {type: "activateUltimate", actorId: actor.id, requestingUserId: game.user.id});
+}
+
+async function insertUltimateTurn(actor) {
+  const combat = game.combat;
+  if (!combat?.started) return null;
+  const current = combat.combatant;
+  const currentInit = Number(current?.initiative ?? 0);
+  const turn = Number(combat.turn ?? 0);
+  const next = combat.turns[turn + 1];
+  let initiative = next ? (currentInit + Number(next.initiative ?? currentInit - 1)) / 2 : currentInit - 0.001;
+  if (!Number.isFinite(initiative)) initiative = currentInit - 0.001;
+  const token = actor.getActiveTokens(true, true)?.[0];
+  const [temporary] = await combat.createEmbeddedDocuments("Combatant", [{
+    name: `ULTIMATE — ${actor.name}`,
+    actorId: actor.id,
+    tokenId: token?.id ?? null,
+    sceneId: token?.parent?.id ?? canvas.scene?.id ?? null,
+    initiative,
+    img: getConfig(actor).orbImage || actor.img,
+    flags: {[MODULE_ID]: {temporaryUltimate: true, resumeCombatantId: current?.id ?? null, resumeRound: combat.round}}
+  }]);
+  if (!temporary) return null;
+  const index = combat.turns.findIndex(entry => entry.id === temporary.id);
+  if (index >= 0) {
+    state.suppressCombatHook = true;
+    await combat.update({turn: index});
+    state.suppressCombatHook = false;
+  }
+  return temporary;
+}
+
+async function removeUltimateTurn(temporary) {
+  if (!temporary) return;
+  const combat = temporary.parent;
+  const resumeId = temporary.getFlag(MODULE_ID, "resumeCombatantId");
+  const resumeRound = temporary.getFlag(MODULE_ID, "resumeRound");
+  state.suppressCombatHook = true;
+  await combat.deleteEmbeddedDocuments("Combatant", [temporary.id]);
+  const resumeIndex = combat.turns.findIndex(entry => entry.id === resumeId);
+  if (resumeIndex >= 0) await combat.update({turn: resumeIndex, round: resumeRound ?? combat.round});
+  state.suppressCombatHook = false;
+}
+
+async function useUltimateItem(actor) {
+  const config = getConfig(actor);
+  const item = actor.items.get(config.ultimateItemId);
+  if (!item) throw new Error(`${actor.name}'s configured Ultimate Item could not be found.`);
+  if (typeof item.use === "function") return item.use();
+  if (typeof item.roll === "function") return item.roll();
+  throw new Error("The configured Ultimate Item cannot be used by this D&D 5e version.");
+}
+
+async function completeUltimate(actorId) {
+  if (!isAuthority()) return;
+  const pending = state.pendingUltimates.get(actorId);
+  if (pending?.timer) window.clearTimeout(pending.timer);
+  const temporary = pending?.combatId && pending?.combatantId
+    ? game.combats.get(pending.combatId)?.combatants.get(pending.combatantId)
+    : null;
+  await removeUltimateTurn(temporary);
+  state.pendingUltimates.delete(actorId);
+  state.ultimateLocks.delete(actorId);
+  game.socket.emit(SOCKET, {type: "ultimateState", actorId, locked: false});
+  refreshOrb(game.actors.get(actorId));
+}
+
+async function executeUltimate(actorId, requestingUserId) {
+  if (!isAuthority() || state.ultimateLocks.has(actorId)) return;
+  const actor = game.actors.get(actorId);
+  const requester = game.users.get(requestingUserId);
+  if (!actor || (!requester?.isGM && !actor.testUserPermission(requester, "OWNER"))) return;
+  const config = getConfig(actor);
+  if (!config.enabled || config.current < config.max) return;
+  const item = actor.items.get(config.ultimateItemId);
+  if (!item) return ui.notifications.warn(`${actor.name}'s configured Ultimate Item could not be found.`);
+
+  state.ultimateLocks.add(actorId);
+  game.socket.emit(SOCKET, {type: "ultimateState", actorId, locked: true});
+  refreshOrb(actor);
+  try {
+    const splash = {actorName: actor.name, image: config.splashImage, duration: config.splashDuration};
+    showSplash(splash);
+    game.socket.emit(SOCKET, {type: "showSplash", sourceUserId: game.user.id, ...splash});
+    const temporary = await insertUltimateTurn(actor);
+    await setEnergy(actor, 0);
+    const pending = {
+      actorId,
+      requestingUserId,
+      combatId: temporary?.parent?.id ?? null,
+      combatantId: temporary?.id ?? null,
+      timer: window.setTimeout(() => completeUltimate(actorId), 120000)
+    };
+    state.pendingUltimates.set(actorId, pending);
+    if (requestingUserId === game.user.id) {
+      await useUltimateItem(actor);
+      await completeUltimate(actorId);
+    } else {
+      game.socket.emit(SOCKET, {type: "useUltimate", actorId, targetUserId: requestingUserId});
+    }
+  } catch (error) {
+    console.error(`${MODULE_ID} | Ultimate failed`, error);
+    ui.notifications.error(`Ultimate failed: ${error.message}`);
+    await completeUltimate(actorId);
+  }
+}
+
+async function onSocket(payload) {
+  if (!payload?.type) return;
+  if (payload.type === "activateUltimate" && isAuthority()) return executeUltimate(payload.actorId, payload.requestingUserId);
+  if (payload.type === "showSplash") {
+    if (payload.sourceUserId !== game.user.id) showSplash(payload);
+    return;
+  }
+  if (payload.type === "useUltimate" && payload.targetUserId === game.user.id) {
+    const actor = game.actors.get(payload.actorId);
+    try {
+      if (!actor?.isOwner) throw new Error("You no longer own this character.");
+      await useUltimateItem(actor);
+      game.socket.emit(SOCKET, {type: "ultimateComplete", actorId: payload.actorId, userId: game.user.id});
+    } catch (error) {
+      console.error(`${MODULE_ID} | Player Ultimate failed`, error);
+      ui.notifications.error(`Ultimate failed: ${error.message}`);
+      game.socket.emit(SOCKET, {type: "ultimateComplete", actorId: payload.actorId, userId: game.user.id, failed: true});
+    }
+    return;
+  }
+  if (payload.type === "ultimateComplete" && isAuthority()) {
+    const pending = state.pendingUltimates.get(payload.actorId);
+    if (pending?.requestingUserId === payload.userId) await completeUltimate(payload.actorId);
+    return;
+  }
+  if (payload.type === "ultimateState") {
+    payload.locked ? state.ultimateLocks.add(payload.actorId) : state.ultimateLocks.delete(payload.actorId);
+    refreshOrb(game.actors.get(payload.actorId));
+  }
+}
+
+function isAttackMessage(message) {
+  const flags = message.flags ?? {};
+  const dnd = flags.dnd5e ?? {};
+  const type = String(dnd.roll?.type ?? dnd.type ?? message.rolls?.[0]?.options?.type ?? "").toLowerCase();
+  return type.includes("attack") || Boolean(dnd.item?.activityId || dnd.activity?.id) && message.rolls?.some(roll => String(roll.options?.type ?? "").includes("attack"));
+}
+
+function targetActorIdsFromMessage(message) {
+  const flags = message.flags ?? {};
+  const candidates = [
+    flags.dnd5e?.targets,
+    flags.dnd5e?.use?.targets,
+    flags.dnd5e?.activity?.targets,
+    flags[MODULE_ID]?.targets
+  ].filter(Boolean).flatMap(value => Array.isArray(value) ? value : Object.values(value));
+  const ids = new Set();
+  for (const target of candidates) {
+    const raw = target?.actorUuid ?? target?.actorId ?? target?.uuid ?? target?.tokenUuid ?? target?.id ?? target;
+    const text = String(raw ?? "");
+    const actorMatch = text.match(/Actor\.([^.]+)/);
+    const tokenMatch = text.match(/Token\.([^.]+)/);
+    if (actorMatch) ids.add(actorMatch[1]);
+    else if (target?.actorId) ids.add(target.actorId);
+    else if (tokenMatch) {
+      const actor = canvas?.tokens?.get(tokenMatch[1])?.actor;
+      if (actor) ids.add(actor.id);
+    }
+  }
+  return ids;
+}
+
+async function processCoreAttackMessage(message) {
+  if (!isAuthority() || game.modules.get("midi-qol")?.active || !isAttackMessage(message)) return;
+  if (state.processedMessages.has(message.id)) return;
+  state.processedMessages.add(message.id);
+  window.setTimeout(() => state.processedMessages.delete(message.id), 60000);
+  const attacker = game.actors.get(message.speaker?.actor) ?? canvas?.tokens?.get(message.speaker?.token)?.actor;
+  if (attacker) await addEnergy(attacker, energyGain(getConfig(attacker), "attack"), "attack");
+  for (const actorId of targetActorIdsFromMessage(message)) {
+    const target = game.actors.get(actorId);
+    if (!target) continue;
+    const config = getConfig(target);
+    if (config.attackedMode === "targeted" || config.attackedMode === "hit") await addEnergy(target, energyGain(config, "attacked"), "attacked");
+  }
+}
+
+async function processMidiWorkflow(workflow) {
+  if (!isAuthority()) return;
+  const key = workflow?.uuid ?? workflow?.id ?? workflow?.itemCardId;
+  if (key && state.processedMessages.has(key)) return;
+  if (key) {
+    state.processedMessages.add(key);
+    window.setTimeout(() => state.processedMessages.delete(key), 60000);
+  }
+  const attacker = workflow?.actor;
+  if (attacker) await addEnergy(attacker, energyGain(getConfig(attacker), "attack"), "attack");
+  const targets = workflow?.targets ?? new Set();
+  const hitTargets = workflow?.hitTargets ?? new Set();
+  for (const target of targets) {
+    const actor = target.actor ?? target.document?.actor;
+    if (!actor) continue;
+    const config = getConfig(actor);
+    const hit = [...hitTargets].some(entry => (entry.id ?? entry.document?.id) === (target.id ?? target.document?.id));
+    if (config.attackedMode === "targeted" || hit) await addEnergy(actor, energyGain(config, "attacked"), hit ? "hit" : "targeted");
+  }
+}
+
+class ElementManager extends FormApplication {
+  static get defaultOptions() {
+    return foundry.utils.mergeObject(super.defaultOptions, {
+      id: "tsru-element-manager",
+      title: "Tely's Star Rail Ultimates — Elements",
+      template: `modules/${MODULE_ID}/templates/element-manager.hbs`,
+      width: 560,
+      height: "auto",
+      closeOnSubmit: true
+    });
+  }
+  getData() { return {elements: foundry.utils.deepClone(getElements())}; }
+  activateListeners(html) {
+    super.activateListeners(html);
+    html.find(".tsru-add-element").on("click", async () => {
+      const elements = this._readElements(html);
+      elements.push({id: foundry.utils.randomID(), name: "New Element", icon: "icons/svg/aura.svg", color: "#ffffff"});
+      await game.settings.set(MODULE_ID, "elementsDraft", elements);
+      this._elementsOverride = elements;
+      this.render(true);
+    });
+    html.find(".tsru-remove-element").on("click", event => {
+      const index = Number(event.currentTarget.closest(".tsru-element-row").dataset.index);
+      const elements = this._readElements(html);
+      elements.splice(index, 1);
+      this._elementsOverride = elements;
+      this.render(true);
+    });
+    html.find("input[data-color-index]").on("change", event => {
+      const index = event.currentTarget.dataset.colorIndex;
+      html.find(`input[name="elements.${index}.color"]`).val(event.currentTarget.value);
+    });
+  }
+  async _render(...args) {
+    if (this._elementsOverride) {
+      const original = this.getData;
+      const override = this._elementsOverride;
+      this.getData = () => ({elements: override});
+      await super._render(...args);
+      this.getData = original;
+      return;
+    }
+    return super._render(...args);
+  }
+  _readElements(html) {
+    const data = new FormData(html[0]);
+    const expanded = foundry.utils.expandObject(Object.fromEntries(data.entries()));
+    return Object.values(expanded.elements ?? {}).map(entry => ({
+      id: entry.id || foundry.utils.randomID(), name: entry.name?.trim() || "Element", icon: entry.icon || "", color: entry.color || "#ffffff"
+    }));
+  }
+  async _updateObject(_event, formData) {
+    const expanded = foundry.utils.expandObject(formData);
+    const elements = Object.values(expanded.elements ?? {}).map(entry => ({id: entry.id, name: entry.name, icon: entry.icon, color: entry.color}));
+    await game.settings.set(MODULE_ID, "elements", elements);
+    this._elementsOverride = null;
+    refreshAllOrbs();
+  }
+}
+
+class ElementMenu extends FormApplication {
+  render() { new ElementManager().render(true); return this; }
+}
+
+function registerSettings() {
+  game.settings.register(MODULE_ID, "elements", {scope: "world", config: false, type: Array, default: []});
+  game.settings.register(MODULE_ID, "elementsDraft", {scope: "client", config: false, type: Array, default: []});
+  game.settings.register(MODULE_ID, "orbLayouts", {scope: "client", config: false, type: Object, default: {}});
+  game.settings.registerMenu(MODULE_ID, "elementManager", {
+    name: "Manage Elements",
+    label: "Open Element Manager",
+    hint: "Create Element names, icons, and colors for assignment on character sheets.",
+    icon: "fas fa-sparkles",
+    type: ElementMenu,
+    restricted: true
+  });
+}
+
+async function injectUltimateTab(app, html) {
+  if (!game.user.isGM || app.actor?.type !== "character") return;
+  const actor = app.actor;
+  const root = html instanceof jQuery ? html : $(html);
+  if (root.find('[data-tab="tsru-ultimate"]').length) return;
+  const nav = root.find('nav.sheet-tabs[data-group="primary"], nav.tabs[data-group="primary"]').first();
+  const body = root.find('.sheet-body, [data-application-part="body"]').first();
+  if (!nav.length || !body.length) {
+    console.warn(`${MODULE_ID} | Could not locate D&D 5e sheet tabs; using header button fallback.`);
+    return;
+  }
+  nav.append(`<a class="item" data-tab="tsru-ultimate" data-group="primary"><i class="fas fa-burst"></i> Ultimate</a>`);
+  const config = getConfig(actor);
+  const elements = getElements().map(entry => ({...entry, selected: entry.id === config.elementId}));
+  const items = actor.items.map(item => ({id: item.id, name: item.name, selected: item.id === config.ultimateItemId})).sort((a, b) => a.name.localeCompare(b.name));
+  const content = await renderTemplate(`modules/${MODULE_ID}/templates/ultimate-tab.hbs`, {
+    config, elements, items,
+    selectedElement: elements.find(entry => entry.selected),
+    modifierSigned: foundry.utils.signedString(regenModifier(config)),
+    modeHit: config.attackedMode === "hit",
+    modeTargeted: config.attackedMode === "targeted"
+  });
+  body.append(content);
+  const tab = body.find('.tsru-sheet-tab');
+  activateConfigListeners(actor, tab, app);
+}
+
+function activateConfigListeners(actor, tab, app) {
+  tab.find(".tsru-config-form").on("submit", async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const fd = new FormData(form);
+    const data = Object.fromEntries(fd.entries());
+    for (const key of ["current", "max", "regenScore", "attackGain", "attackedGain", "splashDuration"]) data[key] = Number(data[key]);
+    for (const key of ["enabled", "showPercent"]) data[key] = form.elements[key]?.checked ?? false;
+    data.max = Math.max(1, data.max || 100);
+    data.current = clamp(data.current, 0, data.max);
+    await actor.setFlag(MODULE_ID, "ultimate", data);
+    ui.notifications.info(`${actor.name}'s Ultimate configuration saved.`);
+    app.render(false);
+    refreshOrb(actor);
+  });
+  tab.find(".file-picker").on("click", event => {
+    const button = event.currentTarget;
+    const target = button.dataset.target;
+    new FilePicker({type: button.dataset.type || "image", current: tab.find(`[name="${target}"]`).val(), callback: path => tab.find(`[name="${target}"]`).val(path)}).browse();
+  });
+  tab.find("input[data-color-for]").on("change", event => tab.find(`[name="${event.currentTarget.dataset.colorFor}"]`).val(event.currentTarget.value));
+  tab.find("[data-action='preview-splash']").on("click", () => showSplash({actorName: actor.name, image: tab.find("[name='splashImage']").val(), duration: Number(tab.find("[name='splashDuration']").val()) || 1}));
+  tab.find("[data-action='reset-energy']").on("click", async () => { await setEnergy(actor, 0); app.render(false); });
+  tab.find("[data-action='fill-energy']").on("click", async () => { await setEnergy(actor, getConfig(actor).max); app.render(false); });
+  tab.find("[data-action='toggle-orb']").on("click", () => toggleOrb(actor));
+  tab.find("[name='regenScore']").on("input", event => tab.find(".tsru-modifier").text(`Modifier: ${foundry.utils.signedString(Math.floor(((Number(event.currentTarget.value) || 10) - 10) / 2))}`));
+}
+
+function addActorHeaderButton(app, buttons) {
+  if (!game.user.isGM || app.actor?.type !== "character") return;
+  buttons.unshift({
+    label: "Ultimate",
+    class: "tsru-open-config",
+    icon: "fas fa-burst",
+    onclick: () => {
+      const tabLink = app.element.find?.('[data-tab="tsru-ultimate"]');
+      if (tabLink?.length) tabLink.trigger("click");
+      else ui.notifications.warn("Open the full character sheet to access the Ultimate tab.");
+    }
+  });
+}
+
+function addHudTool(controls) {
+  const token = controls.find?.(control => control.name === "token") ?? controls.tokens ?? controls.token;
+  if (!token) return;
+  const tool = {
+    name: "tsru-orbs",
+    title: "Show My Ultimate Orbs",
+    icon: "fas fa-burst",
+    button: true,
+    onClick: async () => {
+      const actors = game.actors.filter(canObserveActor);
+      for (const actor of actors) await saveLayout(actor.id, {visible: true});
+      refreshAllOrbs();
+    }
+  };
+  if (Array.isArray(token.tools)) token.tools.push(tool);
+  else token.tools.tsruOrbs = tool;
+}
+
+function registerApi() {
+  game.modules.get(MODULE_ID).api = {
+    getConfig,
+    setEnergy,
+    addEnergy: async (actor, amount, reason = "api") => {
+      if (!game.user.isGM) throw new Error("Only a GM can change Energy through the API.");
+      return addEnergy(actor, amount, reason);
+    },
+    requestUltimate,
+    showSplash,
+    refreshOrbs: refreshAllOrbs,
+    openElementManager: () => new ElementManager().render(true)
+  };
+}
+
+Hooks.once("init", () => {
+  registerSettings();
+  Handlebars.registerHelper("add", (a, b) => Number(a) + Number(b));
+  console.log(`${MODULE_ID} | Initialized`);
+});
+
+Hooks.once("ready", () => {
+  game.socket.on(SOCKET, onSocket);
+  registerApi();
+  refreshAllOrbs();
+  if (game.modules.get("midi-qol")?.active) Hooks.on("midi-qol.RollComplete", processMidiWorkflow);
+});
+
+Hooks.on("renderActorSheet", injectUltimateTab);
+Hooks.on("getActorSheetHeaderButtons", addActorHeaderButton);
+Hooks.on("getSceneControlButtons", addHudTool);
+Hooks.on("createChatMessage", processCoreAttackMessage);
+Hooks.on("updateActor", actor => refreshOrb(actor));
+Hooks.on("deleteActor", actor => state.orbs.get(actor.id)?.destroy());
+Hooks.on("updateUser", user => { if (user.id === game.user.id) refreshAllOrbs(); });
+Hooks.on("canvasReady", refreshAllOrbs);
+
+Hooks.on("deleteCombat", combat => {
+  state.ultimateLocks.clear();
+  for (const combatant of combat.combatants ?? []) {
+    if (combatant.getFlag(MODULE_ID, "temporaryUltimate")) state.ultimateLocks.delete(combatant.actorId);
+  }
+  refreshAllOrbs();
+});
+
+Hooks.on("updateCombat", async combat => {
+  if (!isAuthority() || state.suppressCombatHook) return;
+  const temporary = combat.combatant;
+  if (!temporary?.getFlag(MODULE_ID, "temporaryUltimate")) return;
+  const actor = temporary.actor;
+  if (!actor || state.ultimateLocks.has(actor.id)) return;
+  await removeUltimateTurn(temporary);
+});
