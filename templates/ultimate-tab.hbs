@@ -1,0 +1,44 @@
+<div class="tsru-sheet-tab tab" data-group="primary" data-tab="tsru-ultimate">
+  <form class="tsru-config-form" autocomplete="off">
+    <h2><i class="fas fa-burst"></i> Ultimate Configuration <span class="tsru-gm-badge">GM ONLY</span></h2>
+
+    <fieldset>
+      <legend>Energy</legend>
+      <div class="form-group"><label>Enable for this character</label><input type="checkbox" name="enabled" {{checked config.enabled}}></div>
+      <div class="form-group"><label>Current Energy</label><input type="number" name="current" min="0" value="{{config.current}}"></div>
+      <div class="form-group"><label>Maximum Energy</label><input type="number" name="max" min="1" value="{{config.max}}"></div>
+      <div class="form-group"><label>Energy Regen score</label><div class="form-fields"><input type="number" name="regenScore" value="{{config.regenScore}}"><span class="tsru-modifier">Modifier: {{modifierSigned}}</span></div></div>
+      <div class="form-group"><label>Base Energy when attacking</label><input type="number" name="attackGain" min="0" value="{{config.attackGain}}"></div>
+      <div class="form-group"><label>Base Energy when attacked</label><input type="number" name="attackedGain" min="0" value="{{config.attackedGain}}"></div>
+      <div class="form-group"><label>Count as attacked when</label><select name="attackedMode"><option value="hit" {{#if modeHit}}selected{{/if}}>The attack hits</option><option value="targeted" {{#if modeTargeted}}selected{{/if}}>The character is targeted</option></select></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Ultimate</legend>
+      <div class="form-group"><label>Ultimate Item</label><select name="ultimateItemId"><option value="">— Select an Item —</option>{{#each items}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>{{/each}}</select></div>
+      <div class="form-group"><label>Artwork shown to everyone</label><div class="form-fields"><input type="text" name="splashImage" value="{{config.splashImage}}"><button type="button" class="file-picker" data-type="imagevideo" data-target="splashImage"><i class="fas fa-file-import"></i></button><button type="button" data-action="preview-splash"><i class="fas fa-eye"></i></button></div></div>
+      <div class="form-group"><label>Artwork duration (seconds)</label><input type="number" name="splashDuration" min="0.1" max="30" step="0.1" value="{{config.splashDuration}}"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Floating Orb</legend>
+      <div class="form-group"><label>Orb artwork</label><div class="form-fields"><input type="text" name="orbImage" value="{{config.orbImage}}"><button type="button" class="file-picker" data-type="image" data-target="orbImage"><i class="fas fa-file-import"></i></button></div></div>
+      <div class="form-group"><label>Charging color</label><div class="form-fields"><input type="color" name="chargeColor" value="{{config.chargeColor}}"><input type="text" data-color-for="chargeColor" value="{{config.chargeColor}}"></div></div>
+      <div class="form-group"><label>Ultimate Ready color</label><div class="form-fields"><input type="color" name="readyColor" value="{{config.readyColor}}"><input type="text" data-color-for="readyColor" value="{{config.readyColor}}"></div></div>
+      <div class="form-group"><label>Show percentage inside orb</label><input type="checkbox" name="showPercent" {{checked config.showPercent}}></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Element</legend>
+      <div class="form-group"><label>Assigned Element</label><select name="elementId"><option value="">— None —</option>{{#each elements}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>{{/each}}</select></div>
+      {{#if selectedElement}}<div class="tsru-element-preview" style="--element-color: {{selectedElement.color}}"><img src="{{selectedElement.icon}}"><span>{{selectedElement.name}}</span></div>{{/if}}
+    </fieldset>
+
+    <div class="tsru-sheet-actions">
+      <button type="button" data-action="reset-energy"><i class="fas fa-battery-empty"></i> Empty Energy</button>
+      <button type="button" data-action="fill-energy"><i class="fas fa-battery-full"></i> Fill Energy</button>
+      <button type="button" data-action="toggle-orb"><i class="fas fa-circle"></i> Toggle My Orb</button>
+      <button type="submit"><i class="fas fa-save"></i> Save Configuration</button>
+    </div>
+  </form>
+</div>
