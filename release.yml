@@ -1,0 +1,33 @@
+name: Build Foundry Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          manifest_version="$(jq -r '.version' module.json)"
+          release_version="${GITHUB_REF_NAME#v}"
+          test "$manifest_version" = "$release_version"
+
+      - name: Create Foundry module ZIP
+        shell: bash
+        run: |
+          zip -r "telys-star-rail-ultimates-${GITHUB_REF_NAME}.zip" \
+            module.json README.md LICENSE lang scripts styles templates
+
+      - name: Upload release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "telys-star-rail-ultimates-${GITHUB_REF_NAME}.zip" --clobber
