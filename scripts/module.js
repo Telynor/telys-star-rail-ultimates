@@ -127,7 +127,12 @@ async function saveLayout(actorId, changes) {
 }
 
 function getElements() {
-  return game.settings.get(MODULE_ID, "elements") ?? [];
+  return (game.settings.get(MODULE_ID, "elements") ?? []).map(element => ({
+    ...element,
+    chargeColor: element.chargeColor || element.color || DEFAULT_CONFIG.chargeColor,
+    readyColor: element.readyColor || element.color || DEFAULT_CONFIG.readyColor,
+    color: element.readyColor || element.color || DEFAULT_CONFIG.readyColor
+  }));
 }
 
 class UltimateOrb {
@@ -165,8 +170,10 @@ class UltimateOrb {
 
     const percent = clamp((config.current / config.max) * 100, 0, 100);
     const ready = percent >= 100;
-    const color = ready ? config.readyColor : config.chargeColor;
     const element = getElements().find(entry => entry.id === config.elementId);
+    const color = ready
+      ? (element?.readyColor || DEFAULT_CONFIG.readyColor)
+      : (element?.chargeColor || DEFAULT_CONFIG.chargeColor);
     this.element.style.left = `${clamp(layout.x, 0, window.innerWidth - 40)}px`;
     this.element.style.top = `${clamp(layout.y, 0, window.innerHeight - 40)}px`;
     this.element.style.setProperty("--tsru-size", `${clamp(layout.size, 72, 360)}px`);
@@ -537,7 +544,7 @@ class ElementManager extends FormApplication {
     super.activateListeners(html);
     html.find(".tsru-add-element").on("click", async () => {
       const elements = this._readElements(html);
-      elements.push({id: foundry.utils.randomID(), name: "New Element", icon: "icons/svg/aura.svg", color: "#ffffff"});
+      elements.push({id: foundry.utils.randomID(), name: "New Element", icon: "icons/svg/aura.svg", chargeColor: "#596171", readyColor: "#20e6ff"});
       await game.settings.set(MODULE_ID, "elementsDraft", elements);
       this._elementsOverride = elements;
       this.render(true);
@@ -551,7 +558,8 @@ class ElementManager extends FormApplication {
     });
     html.find("input[data-color-index]").on("change", event => {
       const index = event.currentTarget.dataset.colorIndex;
-      html.find(`input[name="elements.${index}.color"]`).val(event.currentTarget.value);
+      const kind = event.currentTarget.dataset.colorKind;
+      html.find(`input[name="elements.${index}.${kind}"]`).val(event.currentTarget.value);
     });
   }
   async _render(...args) {
@@ -569,12 +577,22 @@ class ElementManager extends FormApplication {
     const data = new FormData(html[0]);
     const expanded = foundry.utils.expandObject(Object.fromEntries(data.entries()));
     return Object.values(expanded.elements ?? {}).map(entry => ({
-      id: entry.id || foundry.utils.randomID(), name: entry.name?.trim() || "Element", icon: entry.icon || "", color: entry.color || "#ffffff"
+      id: entry.id || foundry.utils.randomID(),
+      name: entry.name?.trim() || "Element",
+      icon: entry.icon || "",
+      chargeColor: entry.chargeColor || "#596171",
+      readyColor: entry.readyColor || "#20e6ff"
     }));
   }
   async _updateObject(_event, formData) {
     const expanded = foundry.utils.expandObject(formData);
-    const elements = Object.values(expanded.elements ?? {}).map(entry => ({id: entry.id, name: entry.name, icon: entry.icon, color: entry.color}));
+    const elements = Object.values(expanded.elements ?? {}).map(entry => ({
+      id: entry.id,
+      name: entry.name,
+      icon: entry.icon,
+      chargeColor: entry.chargeColor || "#596171",
+      readyColor: entry.readyColor || "#20e6ff"
+    }));
     await game.settings.set(MODULE_ID, "elements", elements);
     this._elementsOverride = null;
     refreshAllOrbs();
@@ -703,6 +721,17 @@ function activateConfigListeners(actor, tab, app) {
   });
   tab.find("input[data-color-for]").on("change", event => tab.find(`[name="${event.currentTarget.dataset.colorFor}"]`).val(event.currentTarget.value));
   tab.find("[data-action='preview-splash']").on("click", () => showSplash({actorName: actor.name, image: tab.find("[name='splashImage']").val(), duration: Number(tab.find("[name='splashDuration']").val()) || 1}));
+  tab.find("[data-action='set-energy']").on("click", async event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const config = getConfig(actor);
+    const value = clamp(tab.find(".tsru-energy-override-value").val(), 0, config.max);
+    await setEnergy(actor, value);
+    tab.find("[name='current']").val(value);
+    tab.find(".tsru-energy-override-value").val(value);
+    refreshOrb(actor);
+    ui.notifications.info(`${actor.name}'s Energy was set to ${value}/${config.max}.`);
+  });
   tab.find("[data-action='reset-energy']").on("click", async () => { await setEnergy(actor, 0); app.render(false); });
   tab.find("[data-action='fill-energy']").on("click", async () => { await setEnergy(actor, getConfig(actor).max); app.render(false); });
   tab.find("[data-action='show-orb']").on("click", () => showOrb(actor));
