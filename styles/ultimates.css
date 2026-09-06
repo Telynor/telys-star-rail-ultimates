@@ -208,3 +208,181 @@
 .tsru-tab-control { position: relative; }
 .tsru-tab-label { position: absolute; left: -9999px; }
 .tsru-config-fallback { color: var(--tsru-gold); }
+
+/* Isolated v14 character-sheet configuration UI. These selectors intentionally
+   avoid D&D 5e's generic .form-group rules. */
+.dnd5e2 .tsru-sheet-tab,
+.dnd5e2.sheet .tsru-sheet-tab,
+.tsru-sheet-tab {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 18px 20px 30px;
+  overflow: auto;
+  color: #eee9dc;
+  pointer-events: auto;
+}
+
+.tsru-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  pointer-events: auto;
+}
+
+.tsru-config-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 4px 2px 10px;
+  border-bottom: 2px solid rgba(229, 200, 120, .55);
+}
+
+.tsru-config-heading h2 {
+  margin: 0 0 4px;
+  color: #fff7df;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.tsru-config-heading p {
+  margin: 0;
+  color: #c8c2b4;
+  font-size: 13px;
+}
+
+.tsru-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(229, 200, 120, .4);
+  border-radius: 8px;
+  background: rgba(8, 10, 15, .78);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .28);
+}
+
+.tsru-config-section h3 {
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(229, 200, 120, .35);
+  background: linear-gradient(90deg, rgba(119, 80, 33, .44), rgba(24, 27, 36, .65));
+  color: #f0cf85;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.tsru-field {
+  display: grid !important;
+  grid-template-columns: minmax(230px, 1fr) minmax(180px, 300px);
+  align-items: center;
+  gap: 18px;
+  min-height: 58px;
+  margin: 0 !important;
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .075);
+}
+
+.tsru-field:last-child { border-bottom: 0; }
+
+.tsru-field > label,
+.tsru-field-label {
+  display: flex !important;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  color: #f4f0e6 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  font-size: 14px;
+  line-height: 1.25;
+  text-transform: none;
+}
+
+.tsru-field > label strong,
+.tsru-field-label strong { color: #f4f0e6; font-weight: 700; }
+
+.tsru-field > label small,
+.tsru-field-label small {
+  color: #aaa69d;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.tsru-field input,
+.tsru-field select,
+.tsru-field button {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto !important;
+}
+
+.tsru-field > input[type="number"],
+.tsru-field > select,
+.tsru-field-control,
+.tsru-file-control,
+.tsru-color-control,
+.tsru-unit-control { width: 100%; min-width: 0; }
+
+.tsru-field input[type="text"],
+.tsru-field input[type="number"],
+.tsru-field select {
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 1px solid #596273;
+  border-radius: 4px;
+  background: #252a35;
+  color: #f5f5f5;
+  font-size: 13px;
+}
+
+.tsru-field input:focus,
+.tsru-field select:focus {
+  border-color: var(--tsru-cyan);
+  outline: 2px solid rgba(32, 230, 255, .22);
+  box-shadow: none;
+}
+
+.tsru-field-toggle { grid-template-columns: minmax(230px, 1fr) 42px; }
+.tsru-field-toggle input[type="checkbox"] { width: 22px; height: 22px; margin: 0 auto; accent-color: var(--tsru-cyan); }
+.tsru-field-control, .tsru-file-control, .tsru-color-control, .tsru-unit-control { display: flex; align-items: center; gap: 7px; }
+.tsru-field-control input { width: 100px; flex: 0 0 100px; }
+.tsru-file-control input { flex: 1 1 auto; }
+.tsru-file-control button { flex: 0 0 36px; width: 36px; min-width: 36px; height: 34px; margin: 0; padding: 0; }
+.tsru-color-control input[type="color"] { flex: 0 0 54px; width: 54px; height: 34px; padding: 2px; }
+.tsru-color-control input[type="text"] { flex: 1 1 auto; }
+.tsru-unit-control input { flex: 1 1 auto; }
+.tsru-unit-control span { flex: 0 0 auto; color: #c7c1b3; font-size: 12px; }
+.tsru-modifier { color: #efd082; font-weight: 700; white-space: nowrap; }
+
+.tsru-sheet-actions {
+  position: sticky;
+  z-index: 3;
+  bottom: -30px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(229, 200, 120, .45);
+  border-radius: 8px;
+  background: rgba(12, 14, 20, .96);
+  box-shadow: 0 -5px 16px rgba(0, 0, 0, .4);
+}
+
+.tsru-sheet-actions button { min-height: 36px; margin: 0; color: #f5f1e7; }
+.tsru-sheet-actions .tsru-save-config { border-color: #23cfe7; background: linear-gradient(#246273, #173d49); color: white; font-weight: 800; }
+
+@media (max-width: 850px) {
+  .tsru-field { grid-template-columns: 1fr; gap: 7px; }
+  .tsru-field-toggle { grid-template-columns: 1fr 42px; }
+  .tsru-sheet-actions { grid-template-columns: repeat(2, 1fr); }
+}
