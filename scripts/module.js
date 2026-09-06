@@ -39,6 +39,11 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, Number(value) || 0));
 }
 
+function signedNumber(value) {
+  const number = Number(value) || 0;
+  return number >= 0 ? `+${number}` : String(number);
+}
+
 function escapeHTML(value) {
   const div = document.createElement("div");
   div.textContent = String(value ?? "");
@@ -569,30 +574,74 @@ function registerSettings() {
 }
 
 async function injectUltimateTab(app, html) {
-  if (!game.user.isGM || app.actor?.type !== "character") return;
-  const actor = app.actor;
-  const root = html instanceof jQuery ? html : $(html);
+  const actor = app.actor ?? app.document;
+  if (!game.user.isGM || actor?.type !== "character") return;
+  const rootElement = html?.jquery ? html[0] : html instanceof HTMLElement ? html : app.element;
+  if (!rootElement) return;
+  const root = $(rootElement);
   if (root.find('[data-tab="tsru-ultimate"]').length) return;
-  const nav = root.find('nav.sheet-tabs[data-group="primary"], nav.tabs[data-group="primary"]').first();
-  const body = root.find('.sheet-body, [data-application-part="body"]').first();
+  const nav = root.find('nav.tabs[data-group="primary"], nav.sheet-tabs[data-group="primary"], .tabs-right nav.tabs').first();
+  const body = root.find('.tab-body, .sheet-body, [data-application-part="body"]').first();
   if (!nav.length || !body.length) {
-    console.warn(`${MODULE_ID} | Could not locate D&D 5e sheet tabs; using header button fallback.`);
+    addSheetConfigFallback(app, root, actor);
     return;
   }
-  nav.append(`<a class="item" data-tab="tsru-ultimate" data-group="primary"><i class="fas fa-burst"></i> Ultimate</a>`);
+  nav.append(`<a class="item control tsru-tab-control" data-action="tab" data-tab="tsru-ultimate" data-group="primary" data-tooltip="Ultimate Configuration" aria-label="Ultimate Configuration"><i class="fas fa-burst"></i><span class="tsru-tab-label">Ultimate</span></a>`);
   const config = getConfig(actor);
   const elements = getElements().map(entry => ({...entry, selected: entry.id === config.elementId}));
   const items = actor.items.map(item => ({id: item.id, name: item.name, selected: item.id === config.ultimateItemId})).sort((a, b) => a.name.localeCompare(b.name));
   const content = await renderTemplate(`modules/${MODULE_ID}/templates/ultimate-tab.hbs`, {
     config, elements, items,
     selectedElement: elements.find(entry => entry.selected),
-    modifierSigned: foundry.utils.signedString(regenModifier(config)),
+    modifierSigned: signedNumber(regenModifier(config)),
     modeHit: config.attackedMode === "hit",
     modeTargeted: config.attackedMode === "targeted"
   });
   body.append(content);
   const tab = body.find('.tsru-sheet-tab');
   activateConfigListeners(actor, tab, app);
+  const ultimateControl = nav.find('[data-tab="tsru-ultimate"]');
+  ultimateControl.on("click.tsru", event => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    nav.find('[data-tab]').removeClass("active");
+    ultimateControl.addClass("active");
+    root.find('.tab[data-group="primary"]').removeClass("active");
+    tab.addClass("active");
+    if (app.tabGroups) app.tabGroups.primary = "tsru-ultimate";
+  });
+  nav.find('[data-tab]').not('[data-tab="tsru-ultimate"]').on("click.tsru-hide", () => tab.removeClass("active"));
+}
+
+function addSheetConfigFallback(app, root, actor) {
+  if (root.find(".tsru-config-fallback").length) return;
+  const header = root.closest(".window-app").find(".window-header").first().length
+    ? root.closest(".window-app").find(".window-header").first()
+    : root.find(".window-header").first();
+  if (!header.length) return console.warn(`${MODULE_ID} | Could not add Ultimate tab or fallback button to`, app);
+  const button = $(`<button type="button" class="header-control icon tsru-config-fallback" data-tooltip="Ultimate Configuration" aria-label="Ultimate Configuration"><i class="fas fa-burst"></i></button>`);
+  header.find(".window-controls").prepend(button);
+  button.on("click", () => openUltimateConfig(actor, app));
+}
+
+async function openUltimateConfig(actor, sheetApp = null) {
+  const config = getConfig(actor);
+  const elements = getElements().map(entry => ({...entry, selected: entry.id === config.elementId}));
+  const items = actor.items.map(item => ({id: item.id, name: item.name, selected: item.id === config.ultimateItemId})).sort((a, b) => a.name.localeCompare(b.name));
+  const content = await renderTemplate(`modules/${MODULE_ID}/templates/ultimate-tab.hbs`, {
+    config, elements, items,
+    selectedElement: elements.find(entry => entry.selected),
+    modifierSigned: signedNumber(regenModifier(config)),
+    modeHit: config.attackedMode === "hit",
+    modeTargeted: config.attackedMode === "targeted"
+  });
+  const dialog = new Dialog({title: `${actor.name} — Ultimate Configuration`, content, buttons: {close: {label: "Close"}}}, {width: 620, height: 760, resizable: true});
+  Hooks.once("renderDialog", rendered => {
+    if (rendered !== dialog) return;
+    const root = rendered.element.find(".tsru-sheet-tab").addClass("active");
+    activateConfigListeners(actor, root, sheetApp ?? rendered);
+  });
+  dialog.render(true);
 }
 
 function activateConfigListeners(actor, tab, app) {
@@ -620,7 +669,7 @@ function activateConfigListeners(actor, tab, app) {
   tab.find("[data-action='reset-energy']").on("click", async () => { await setEnergy(actor, 0); app.render(false); });
   tab.find("[data-action='fill-energy']").on("click", async () => { await setEnergy(actor, getConfig(actor).max); app.render(false); });
   tab.find("[data-action='toggle-orb']").on("click", () => toggleOrb(actor));
-  tab.find("[name='regenScore']").on("input", event => tab.find(".tsru-modifier").text(`Modifier: ${foundry.utils.signedString(Math.floor(((Number(event.currentTarget.value) || 10) - 10) / 2))}`));
+  tab.find("[name='regenScore']").on("input", event => tab.find(".tsru-modifier").text(`Modifier: ${signedNumber(Math.floor(((Number(event.currentTarget.value) || 10) - 10) / 2))}`));
 }
 
 function addActorHeaderButton(app, buttons) {
@@ -693,6 +742,11 @@ Hooks.once("ready", () => {
 });
 
 Hooks.on("renderActorSheet", injectUltimateTab);
+Hooks.on("renderCharacterActorSheet", injectUltimateTab);
+Hooks.on("renderApplicationV2", (app, html) => {
+  const actor = app.actor ?? app.document;
+  if (actor?.documentName === "Actor" && actor.type === "character") injectUltimateTab(app, html);
+});
 Hooks.on("getActorSheetHeaderButtons", addActorHeaderButton);
 Hooks.on("getSceneControlButtons", addHudTool);
 Hooks.on("createChatMessage", processCoreAttackMessage);
