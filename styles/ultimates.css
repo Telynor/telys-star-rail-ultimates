@@ -8,7 +8,7 @@
   --tsru-fill: 0%;
   --tsru-color: #596171;
   position: fixed;
-  z-index: 70;
+  z-index: 10010;
   width: var(--tsru-size);
   height: calc(var(--tsru-size) + 31px);
   user-select: none;
