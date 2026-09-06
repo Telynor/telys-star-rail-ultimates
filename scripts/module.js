@@ -267,6 +267,32 @@ async function toggleOrb(actor) {
   refreshOrb(actor);
 }
 
+async function showOrb(actor, {notify = true} = {}) {
+  if (!actor) {
+    if (notify) ui.notifications.error("No character was found for this Ultimate orb.");
+    return false;
+  }
+  const config = getConfig(actor);
+  if (!config.enabled) {
+    if (notify) ui.notifications.warn(`${actor.name}'s Ultimate system is not enabled. Enable it and save the configuration first.`);
+    return false;
+  }
+  await saveLayout(actor.id, {visible: true});
+  try {
+    refreshOrb(actor);
+  } catch (error) {
+    console.error(`${MODULE_ID} | Could not render ${actor.name}'s Ultimate orb`, error);
+    if (notify) ui.notifications.error(`Could not show ${actor.name}'s Ultimate orb: ${error.message}`);
+    return false;
+  }
+  const rendered = Boolean(document.querySelector(`.tsru-orb-widget[data-actor-id="${actor.id}"]`));
+  if (notify) {
+    if (rendered) ui.notifications.info(`${actor.name}'s Ultimate orb is now visible.`);
+    else ui.notifications.error(`${actor.name}'s Ultimate orb could not be created. Check the console for details.`);
+  }
+  return rendered;
+}
+
 function showSplash({actorName, image, duration = 1}) {
   if (!image) return;
   document.querySelectorAll(".tsru-splash").forEach(element => element.remove());
@@ -679,7 +705,7 @@ function activateConfigListeners(actor, tab, app) {
   tab.find("[data-action='preview-splash']").on("click", () => showSplash({actorName: actor.name, image: tab.find("[name='splashImage']").val(), duration: Number(tab.find("[name='splashDuration']").val()) || 1}));
   tab.find("[data-action='reset-energy']").on("click", async () => { await setEnergy(actor, 0); app.render(false); });
   tab.find("[data-action='fill-energy']").on("click", async () => { await setEnergy(actor, getConfig(actor).max); app.render(false); });
-  tab.find("[data-action='toggle-orb']").on("click", () => toggleOrb(actor));
+  tab.find("[data-action='show-orb']").on("click", () => showOrb(actor));
   tab.find("[name='regenScore']").on("input", event => tab.find(".tsru-modifier").text(`Modifier: ${signedNumber(Math.floor(((Number(event.currentTarget.value) || 10) - 10) / 2))}`));
 }
 
@@ -713,11 +739,10 @@ function addHudTool(controls) {
         ui.notifications.warn("No enabled Ultimate characters are available to you. A GM must enable a character in its Ultimate tab first.");
         return;
       }
-      const hidden = actors.filter(actor => !userLayout(actor.id).visible);
-      for (const actor of actors) await saveLayout(actor.id, {visible: true});
-      refreshAllOrbs();
-      if (hidden.length) ui.notifications.info(`Showing ${hidden.length} Ultimate orb${hidden.length === 1 ? "" : "s"}.`);
-      else ui.notifications.info("Your configured Ultimate orbs are already visible.");
+      let shown = 0;
+      for (const actor of actors) if (await showOrb(actor, {notify: false})) shown++;
+      if (shown) ui.notifications.info(`Showing ${shown} Ultimate orb${shown === 1 ? "" : "s"}.`);
+      else ui.notifications.error("No Ultimate orbs could be displayed. Check the browser console for details.");
     }
   };
   if (Array.isArray(token.tools)) token.tools.push(tool);
@@ -735,6 +760,7 @@ function registerApi() {
     requestUltimate,
     showSplash,
     refreshOrbs: refreshAllOrbs,
+    showOrb,
     openElementManager: () => new ElementManager().render(true)
   };
 }
