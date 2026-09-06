@@ -1,44 +1,44 @@
-<div class="tsru-sheet-tab tab" data-group="primary" data-tab="tsru-ultimate">
-  <form class="tsru-config-form" autocomplete="off">
-    <h2><i class="fas fa-burst"></i> Ultimate Configuration <span class="tsru-gm-badge">GM ONLY</span></h2>
+<section class="tsru-sheet-tab tab" data-group="primary" data-tab="tsru-ultimate">
+  <div class="tsru-config-panel">
+    <header class="tsru-config-heading"><div><h2><i class="fas fa-burst"></i> Ultimate Configuration</h2><p>Configure this character's Energy, Ultimate artwork, and floating orb.</p></div><span class="tsru-gm-badge">GM ONLY</span></header>
 
-    <fieldset>
-      <legend>Energy</legend>
-      <div class="form-group"><label>Enable for this character</label><input type="checkbox" name="enabled" {{checked config.enabled}}></div>
-      <div class="form-group"><label>Current Energy</label><input type="number" name="current" min="0" value="{{config.current}}"></div>
-      <div class="form-group"><label>Maximum Energy</label><input type="number" name="max" min="1" value="{{config.max}}"></div>
-      <div class="form-group"><label>Energy Regen score</label><div class="form-fields"><input type="number" name="regenScore" value="{{config.regenScore}}"><span class="tsru-modifier">Modifier: {{modifierSigned}}</span></div></div>
-      <div class="form-group"><label>Base Energy when attacking</label><input type="number" name="attackGain" min="0" value="{{config.attackGain}}"></div>
-      <div class="form-group"><label>Base Energy when attacked</label><input type="number" name="attackedGain" min="0" value="{{config.attackedGain}}"></div>
-      <div class="form-group"><label>Count as attacked when</label><select name="attackedMode"><option value="hit" {{#if modeHit}}selected{{/if}}>The attack hits</option><option value="targeted" {{#if modeTargeted}}selected{{/if}}>The character is targeted</option></select></div>
-    </fieldset>
+    <div class="tsru-config-section">
+      <h3><i class="fas fa-battery-three-quarters"></i> Energy</h3>
+      <div class="tsru-field tsru-field-toggle"><span class="tsru-field-label"><strong>Enable Ultimate system</strong><small>Allows this character to gain Energy and display an orb.</small></span><input type="checkbox" name="enabled" {{checked config.enabled}}></div>
+      <div class="tsru-field"><label><strong>Current Energy</strong><small>The amount currently stored.</small></label><input type="number" name="current" min="0" value="{{config.current}}"></div>
+      <div class="tsru-field"><label><strong>Maximum Energy</strong><small>The amount required to make the Ultimate ready.</small></label><input type="number" name="max" min="1" value="{{config.max}}"></div>
+      <div class="tsru-field"><label><strong>Energy Regen score</strong><small>Uses the normal D&amp;D ability-score modifier calculation.</small></label><div class="tsru-field-control"><input type="number" name="regenScore" value="{{config.regenScore}}"><span class="tsru-modifier">Modifier: {{modifierSigned}}</span></div></div>
+      <div class="tsru-field"><label><strong>Energy gained when attacking</strong><small>Base gain before the Energy Regen modifier.</small></label><input type="number" name="attackGain" min="0" value="{{config.attackGain}}"></div>
+      <div class="tsru-field"><label><strong>Energy gained when attacked</strong><small>Base gain before the Energy Regen modifier.</small></label><input type="number" name="attackedGain" min="0" value="{{config.attackedGain}}"></div>
+      <div class="tsru-field"><label><strong>Count as attacked when</strong><small>Choose whether targeting alone is enough.</small></label><select name="attackedMode"><option value="hit" {{#if modeHit}}selected{{/if}}>The attack hits</option><option value="targeted" {{#if modeTargeted}}selected{{/if}}>The character is targeted</option></select></div>
+    </div>
 
-    <fieldset>
-      <legend>Ultimate</legend>
-      <div class="form-group"><label>Ultimate Item</label><select name="ultimateItemId"><option value="">— Select an Item —</option>{{#each items}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>{{/each}}</select></div>
-      <div class="form-group"><label>Artwork shown to everyone</label><div class="form-fields"><input type="text" name="splashImage" value="{{config.splashImage}}"><button type="button" class="file-picker" data-type="imagevideo" data-target="splashImage"><i class="fas fa-file-import"></i></button><button type="button" data-action="preview-splash"><i class="fas fa-eye"></i></button></div></div>
-      <div class="form-group"><label>Artwork duration (seconds)</label><input type="number" name="splashDuration" min="0.1" max="30" step="0.1" value="{{config.splashDuration}}"></div>
-    </fieldset>
+    <div class="tsru-config-section">
+      <h3><i class="fas fa-wand-magic-sparkles"></i> Ultimate &amp; Splash Artwork</h3>
+      <div class="tsru-field tsru-field-wide"><label><strong>Ultimate Item</strong><small>The item Foundry uses when the charged orb is clicked.</small></label><select name="ultimateItemId"><option value="">— Select an Item —</option>{{#each items}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>{{/each}}</select></div>
+      <div class="tsru-field tsru-field-wide"><label><strong>Combat splash artwork</strong><small>Displayed briefly to every connected player.</small></label><div class="tsru-file-control"><input type="text" name="splashImage" value="{{config.splashImage}}" placeholder="Choose an image or video"><button type="button" class="file-picker" data-type="imagevideo" data-target="splashImage" title="Browse Files"><i class="fas fa-file-import"></i></button><button type="button" data-action="preview-splash" title="Preview Splash"><i class="fas fa-eye"></i></button></div></div>
+      <div class="tsru-field"><label><strong>Splash duration</strong><small>How long everyone sees the artwork.</small></label><div class="tsru-unit-control"><input type="number" name="splashDuration" min="0.1" max="30" step="0.1" value="{{config.splashDuration}}"><span>seconds</span></div></div>
+    </div>
 
-    <fieldset>
-      <legend>Floating Orb</legend>
-      <div class="form-group"><label>Orb artwork</label><div class="form-fields"><input type="text" name="orbImage" value="{{config.orbImage}}"><button type="button" class="file-picker" data-type="image" data-target="orbImage"><i class="fas fa-file-import"></i></button></div></div>
-      <div class="form-group"><label>Charging color</label><div class="form-fields"><input type="color" name="chargeColor" value="{{config.chargeColor}}"><input type="text" data-color-for="chargeColor" value="{{config.chargeColor}}"></div></div>
-      <div class="form-group"><label>Ultimate Ready color</label><div class="form-fields"><input type="color" name="readyColor" value="{{config.readyColor}}"><input type="text" data-color-for="readyColor" value="{{config.readyColor}}"></div></div>
-      <div class="form-group"><label>Show percentage inside orb</label><input type="checkbox" name="showPercent" {{checked config.showPercent}}></div>
-    </fieldset>
+    <div class="tsru-config-section">
+      <h3><i class="fas fa-circle"></i> Floating Ultimate Orb</h3>
+      <div class="tsru-field tsru-field-wide"><label><strong>Orb artwork</strong><small>Cropped into the circular Energy display.</small></label><div class="tsru-file-control"><input type="text" name="orbImage" value="{{config.orbImage}}" placeholder="Choose an image"><button type="button" class="file-picker" data-type="image" data-target="orbImage" title="Browse Files"><i class="fas fa-file-import"></i></button></div></div>
+      <div class="tsru-field"><label><strong>Charging color</strong><small>The muted fill shown below 100%.</small></label><div class="tsru-color-control"><input type="color" name="chargeColor" value="{{config.chargeColor}}"><input type="text" data-color-for="chargeColor" value="{{config.chargeColor}}"></div></div>
+      <div class="tsru-field"><label><strong>Ultimate Ready color</strong><small>The vibrant fill shown at 100%.</small></label><div class="tsru-color-control"><input type="color" name="readyColor" value="{{config.readyColor}}"><input type="text" data-color-for="readyColor" value="{{config.readyColor}}"></div></div>
+      <div class="tsru-field tsru-field-toggle"><span class="tsru-field-label"><strong>Show percentage inside orb</strong><small>Displays the current charge as a number.</small></span><input type="checkbox" name="showPercent" {{checked config.showPercent}}></div>
+    </div>
 
-    <fieldset>
-      <legend>Element</legend>
-      <div class="form-group"><label>Assigned Element</label><select name="elementId"><option value="">— None —</option>{{#each elements}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>{{/each}}</select></div>
+    <div class="tsru-config-section">
+      <h3><i class="fas fa-fire-flame-curved"></i> Element</h3>
+      <div class="tsru-field tsru-field-wide"><label><strong>Assigned Element</strong><small>Elements are created from the module settings.</small></label><select name="elementId"><option value="">— None —</option>{{#each elements}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>{{/each}}</select></div>
       {{#if selectedElement}}<div class="tsru-element-preview" style="--element-color: {{selectedElement.color}}"><img src="{{selectedElement.icon}}"><span>{{selectedElement.name}}</span></div>{{/if}}
-    </fieldset>
+    </div>
 
-    <div class="tsru-sheet-actions">
+    <footer class="tsru-sheet-actions">
       <button type="button" data-action="reset-energy"><i class="fas fa-battery-empty"></i> Empty Energy</button>
       <button type="button" data-action="fill-energy"><i class="fas fa-battery-full"></i> Fill Energy</button>
       <button type="button" data-action="toggle-orb"><i class="fas fa-circle"></i> Toggle My Orb</button>
-      <button type="submit"><i class="fas fa-save"></i> Save Configuration</button>
-    </div>
-  </form>
-</div>
+      <button type="button" class="tsru-save-config" data-action="save-config"><i class="fas fa-save"></i> Save Configuration</button>
+    </footer>
+  </div>
+</section>
