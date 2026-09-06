@@ -33,8 +33,8 @@ The GitHub repository must be named `telys-star-rail-ultimates` under the `Telyn
 
 1. Create a public GitHub repository named `telys-star-rail-ultimates`.
 2. Upload the contents of this project to its `main` branch. `module.json` must be at the repository root.
-3. Create and publish a release tagged `v1.0.0`.
-4. The included GitHub Action automatically builds and attaches `telys-star-rail-ultimates-v1.0.0.zip`.
+3. Push changes to `main` (or run the release workflow manually).
+4. The included GitHub Action reads the manifest version and automatically creates the matching release and installation ZIP.
 5. The ZIP contains `module.json` at its root, as Foundry requires.
 
 ## Using the module
