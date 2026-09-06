@@ -13,6 +13,11 @@
       <div class="tsru-field"><label><strong>Count as attacked when</strong><small>Choose whether targeting alone is enough.</small></label><select name="attackedMode"><option value="hit" {{#if modeHit}}selected{{/if}}>The attack hits</option><option value="targeted" {{#if modeTargeted}}selected{{/if}}>The character is targeted</option></select></div>
     </div>
 
+    <div class="tsru-config-section tsru-energy-override">
+      <h3><i class="fas fa-gauge-high"></i> Manual Energy Override</h3>
+      <div class="tsru-field tsru-field-wide"><label><strong>Set current Energy immediately</strong><small>Overrides this character's current Energy without changing any other settings.</small></label><div class="tsru-override-control"><input type="number" class="tsru-energy-override-value" min="0" max="{{config.max}}" value="{{config.current}}"><button type="button" data-action="set-energy"><i class="fas fa-check"></i> Set Energy</button></div></div>
+    </div>
+
     <div class="tsru-config-section">
       <h3><i class="fas fa-wand-magic-sparkles"></i> Ultimate &amp; Splash Artwork</h3>
       <div class="tsru-field tsru-field-wide"><label><strong>Ultimate Item</strong><small>The item Foundry uses when the charged orb is clicked.</small></label><select name="ultimateItemId"><option value="">— Select an Item —</option>{{#each items}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>{{/each}}</select></div>
@@ -23,8 +28,7 @@
     <div class="tsru-config-section">
       <h3><i class="fas fa-circle"></i> Floating Ultimate Orb</h3>
       <div class="tsru-field tsru-field-wide"><label><strong>Orb artwork</strong><small>Cropped into the circular Energy display.</small></label><div class="tsru-file-control"><input type="text" name="orbImage" value="{{config.orbImage}}" placeholder="Choose an image"><button type="button" class="file-picker" data-type="image" data-target="orbImage" title="Browse Files"><i class="fas fa-file-import"></i></button></div></div>
-      <div class="tsru-field"><label><strong>Charging color</strong><small>The muted fill shown below 100%.</small></label><div class="tsru-color-control"><input type="color" name="chargeColor" value="{{config.chargeColor}}"><input type="text" data-color-for="chargeColor" value="{{config.chargeColor}}"></div></div>
-      <div class="tsru-field"><label><strong>Ultimate Ready color</strong><small>The vibrant fill shown at 100%.</small></label><div class="tsru-color-control"><input type="color" name="readyColor" value="{{config.readyColor}}"><input type="text" data-color-for="readyColor" value="{{config.readyColor}}"></div></div>
+      <div class="tsru-field"><label><strong>Orb colors</strong><small>Charging and Ultimate Ready colors are inherited from the assigned Element.</small></label><div class="tsru-inherited-colors">{{#if selectedElement}}<span style="--swatch: {{selectedElement.chargeColor}}"><i></i> Charging</span><span style="--swatch: {{selectedElement.readyColor}}"><i></i> Ready</span>{{else}}<em>Assign an Element below to choose the orb colors.</em>{{/if}}</div></div>
       <div class="tsru-field tsru-field-toggle"><span class="tsru-field-label"><strong>Show percentage inside orb</strong><small>Displays the current charge as a number.</small></span><input type="checkbox" name="showPercent" {{checked config.showPercent}}></div>
     </div>
 
