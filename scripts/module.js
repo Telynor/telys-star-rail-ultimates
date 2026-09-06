@@ -581,7 +581,9 @@ async function injectUltimateTab(app, html) {
   const root = $(rootElement);
   if (root.find('[data-tab="tsru-ultimate"]').length) return;
   const nav = root.find('nav.tabs[data-group="primary"], nav.sheet-tabs[data-group="primary"], .tabs-right nav.tabs').first();
-  const body = root.find('.tab-body, .sheet-body, [data-application-part="body"]').first();
+  let body = root.find('.tab-body').first();
+  if (!body.length) body = root.find('.sheet-body').first();
+  if (!body.length) body = root.find('[data-application-part="body"]').first();
   if (!nav.length || !body.length) {
     addSheetConfigFallback(app, root, actor);
     return;
@@ -608,9 +610,13 @@ async function injectUltimateTab(app, html) {
     ultimateControl.addClass("active");
     root.find('.tab[data-group="primary"]').removeClass("active");
     tab.addClass("active");
+    root.addClass("tsru-tab-open");
     if (app.tabGroups) app.tabGroups.primary = "tsru-ultimate";
   });
-  nav.find('[data-tab]').not('[data-tab="tsru-ultimate"]').on("click.tsru-hide", () => tab.removeClass("active"));
+  nav.find('[data-tab]').not('[data-tab="tsru-ultimate"]').on("click.tsru-hide", () => {
+    tab.removeClass("active");
+    root.removeClass("tsru-tab-open");
+  });
 }
 
 function addSheetConfigFallback(app, root, actor) {
@@ -635,7 +641,7 @@ async function openUltimateConfig(actor, sheetApp = null) {
     modeHit: config.attackedMode === "hit",
     modeTargeted: config.attackedMode === "targeted"
   });
-  const dialog = new Dialog({title: `${actor.name} — Ultimate Configuration`, content, buttons: {close: {label: "Close"}}}, {width: 620, height: 760, resizable: true});
+  const dialog = new Dialog({title: `${actor.name} — Ultimate Configuration`, content, buttons: {close: {label: "Close"}}}, {width: 620, height: 760, resizable: true, classes: ["tsru-config-dialog"]});
   Hooks.once("renderDialog", rendered => {
     if (rendered !== dialog) return;
     const root = rendered.element.find(".tsru-sheet-tab").addClass("active");
