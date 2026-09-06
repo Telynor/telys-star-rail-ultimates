@@ -371,6 +371,15 @@
 .tsru-unit-control input { flex: 1 1 auto; }
 .tsru-unit-control span { flex: 0 0 auto; color: #c7c1b3; font-size: 12px; }
 .tsru-modifier { color: #efd082; font-weight: 700; white-space: nowrap; }
+.tsru-override-control { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(115px, auto); gap: 8px; width: 100%; min-width: 0; }
+.tsru-override-control input { width: 100%; }
+.tsru-override-control button { min-height: 34px; margin: 0; white-space: nowrap; }
+.tsru-energy-override { border-color: rgba(32, 230, 255, .5); }
+.tsru-energy-override h3 { background: linear-gradient(90deg, rgba(25, 104, 119, .5), rgba(24, 27, 36, .65)); color: #82efff; }
+.tsru-inherited-colors { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.tsru-inherited-colors span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid #4d5665; border-radius: 4px; background: #222731; color: #eee; font-size: 12px; }
+.tsru-inherited-colors span i { display: block; width: 18px; height: 18px; border: 1px solid rgba(255,255,255,.7); border-radius: 50%; background: var(--swatch); box-shadow: 0 0 6px var(--swatch); }
+.tsru-inherited-colors em { color: #aaa69d; font-size: 12px; text-align: right; }
 
 .tsru-sheet-actions {
   position: sticky;
